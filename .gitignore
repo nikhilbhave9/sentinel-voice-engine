@@ -1,2 +1,6 @@
 notes.md
 venv
+.env
+pycache
+*.pyc
+.DS_Store
