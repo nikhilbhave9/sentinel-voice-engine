@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Python Command Recovery",
+  "description": "Reminds Kiro to try Ctrl+C if Python command line codes aren't working or appear stuck",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "If you encountered issues with Python command line codes that weren't working or appeared stuck, try using Ctrl+C to interrupt the process before re-attempting the commands."
+  }
+}

@@ -1,1 +1,1 @@
-# Sentinel Insurance Agent - Source Package
+# Simplified insurance agent application

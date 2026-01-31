@@ -7,7 +7,7 @@ import logging
 import time
 from typing import Dict, Any, Optional, List
 import google.genai as genai
-from core.config import get_api_key
+from src.core.config import get_api_key
 
 logger = logging.getLogger(__name__)
 

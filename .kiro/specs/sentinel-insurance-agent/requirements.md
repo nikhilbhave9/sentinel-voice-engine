@@ -51,17 +51,17 @@ Sentinel is an AI insurance voice agent designed to handle customer interactions
 4. WHEN the Clear Conversation button is clicked, THE State_Manager SHALL reset all conversation data
 5. THE sidebar SHALL update automatically as the conversation progresses
 
-### Requirement 4: State Persistence
+### Requirement 4: Session-Only State Management
 
-**User Story:** As a user, I want my conversation to persist during my session, so that I don't lose context when the interface refreshes.
+**User Story:** As a user, I want my conversation to be maintained during my active browser session, so that I can continue the conversation without losing context, but I want each new session to start fresh.
 
 #### Acceptance Criteria
 
-1. THE State_Manager SHALL persist all conversation data across Streamlit reruns
-2. THE State_Manager SHALL maintain conversation history without loss during interface updates
-3. THE State_Manager SHALL preserve session statistics across reruns
-4. THE State_Manager SHALL maintain current conversation state across reruns
-5. WHEN the application restarts, THE State_Manager SHALL initialize with empty state unless explicitly preserved
+1. THE State_Manager SHALL maintain conversation data during the active browser session
+2. THE State_Manager SHALL maintain conversation history during Streamlit reruns within the same session
+3. THE State_Manager SHALL preserve session statistics during the active session
+4. THE State_Manager SHALL maintain current conversation state during the active session
+5. WHEN the browser is refreshed or the application is restarted, THE State_Manager SHALL initialize with fresh state
 
 ### Requirement 5: AI Response Generation
 
@@ -89,15 +89,15 @@ Sentinel is an AI insurance voice agent designed to handle customer interactions
 
 ### Requirement 7: Session Management
 
-**User Story:** As a user, I want to manage my conversation session, so that I can start fresh when needed or continue existing conversations.
+**User Story:** As a user, I want to manage my conversation session, so that I can start fresh when needed or continue existing conversations within the same browser session.
 
 #### Acceptance Criteria
 
 1. THE Sentinel SHALL assume single-user operation for Stage 1
-2. THE Sentinel SHALL maintain session continuity until explicitly cleared
+2. THE Sentinel SHALL maintain session continuity during the active browser session only
 3. WHEN the Clear Conversation button is activated, THE Sentinel SHALL reset to initial greeting state
 4. THE Sentinel SHALL track and display session metrics including message count
-5. THE Sentinel SHALL collect and display user information gathered during the conversation
+5. THE Sentinel SHALL collect and display user information gathered during the current session only
 
 ### Requirement 8: Error Handling and Reliability
 

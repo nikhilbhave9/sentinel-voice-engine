@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import logging
 import re
 from .models import ConversationState, UserInfo, ConversationStateData
-from integration.gemini_client import generate_response
+from src.integration.gemini_client import generate_response
 
 logger = logging.getLogger(__name__)
 

@@ -104,7 +104,7 @@ SessionState = {
     'conversation_state': str,         # 'greeting|support_flow|sales_flow'
     'message_count': int,
     'user_info': Dict[str, Any],       # Collected user information
-    'initialized': bool
+    'initialized': bool                # Session initialization flag (not persistent)
 }
 ```
 
@@ -139,7 +139,7 @@ stateDiagram-v2
 - `handle_api_error(error)`: Processes API errors and provides fallback responses
 
 **Configuration**:
-- Model: `gemini-1.5-flash` (free tier)
+- Model: `gemini-2.5-flash-lite` (free tier)
 - Temperature: 0.7 (balanced creativity/consistency)
 - Max tokens: 1024 (sufficient for insurance responses)
 - Safety settings: Default (appropriate for insurance domain)
@@ -212,8 +212,8 @@ class UserInfo:
 *For any* empty string or whitespace-only input, the system should prevent message submission and maintain the current conversation state unchanged.
 **Validates: Requirements 2.4**
 
-### Property 4: State Persistence Across Reruns
-*For any* conversation state (messages, statistics, conversation flow state, user info), the state should persist unchanged across Streamlit application reruns until explicitly cleared.
+### Property 4: Session-Only State Management
+*For any* conversation state (messages, statistics, conversation flow state, user info), the state should be maintained during the active browser session but reset to fresh state when the browser is refreshed or the application is restarted.
 **Validates: Requirements 4.1, 4.2, 4.3, 4.4**
 
 ### Property 5: Conversation State Transitions
@@ -240,8 +240,8 @@ class UserInfo:
 *For any* system error (API unavailability, network issues, processing failures), the system should display appropriate error messages, maintain conversation state, and allow user retry without crashing.
 **Validates: Requirements 8.1, 8.2, 8.3, 8.4**
 
-### Property 11: Session Continuity
-*For any* conversation session, the system should maintain session continuity across all interactions until the user explicitly clears the conversation.
+### Property 11: Session-Only Continuity
+*For any* conversation session, the system should maintain session continuity during the active browser session only, starting fresh when the browser is refreshed or the application is restarted.
 **Validates: Requirements 7.2**
 
 ### Property 12: Privacy-Preserving Error Logging
