@@ -32,8 +32,7 @@ def _initialize_client():
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not found in environment variables")
         
-        genai.configure(api_key=api_key)
-        _client = genai.GenerativeModel('gemini-2.5-flash-lite')
+        _client = genai.Client(api_key=api_key)
         logger.info("Gemini client initialized successfully")
 
 
@@ -85,30 +84,27 @@ def generate_response(prompt: str, context: str = "", conversation_history: Opti
         if context:
             full_prompt = f"{context}\n\n{prompt}"
         
-        # If we have conversation history, use chat mode
-        if conversation_history:
-            # Convert conversation history to Gemini format
-            chat_history = []
-            for msg in conversation_history:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                if role and content:
-                    chat_history.append({"role": role, "parts": [content]})
-            
-            # Start chat with history
-            chat = _client.start_chat(history=chat_history)
-            response = chat.send_message(full_prompt)
-        else:
-            # Single message generation
-            response = _client.generate_content(
-                full_prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=0.7,
-                    max_output_tokens=1024,
-                )
-            )
+        # For now, use a simple generate approach
+        # The google-genai library may have different methods than the older google-generativeai
+        response = _client.models.generate_content(
+            model='gemini-2.5-flash-lite',
+            contents=[{"role": "user", "parts": [{"text": full_prompt}]}],
+            config={
+                "temperature": 0.7,
+                "max_output_tokens": 1024,
+            }
+        )
         
-        return format_response(response.text)
+        # Extract text from response
+        if hasattr(response, 'text'):
+            return format_response(response.text)
+        elif hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                text = candidate.content.parts[0].text
+                return format_response(text)
+        
+        return format_response("Response received but could not extract text")
         
     except Exception as e:
         return handle_api_error(e)
