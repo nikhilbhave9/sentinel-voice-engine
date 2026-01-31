@@ -1,1 +1,1 @@
-# Integration layer for external services
+# Integration modules for external services

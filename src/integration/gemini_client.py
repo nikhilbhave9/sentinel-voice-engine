@@ -1,236 +1,191 @@
-import os
+"""
+Simplified Gemini AI integration.
+Handles API communication, response processing, and basic error handling.
+"""
+
+import logging
 import time
-from typing import List, Dict, Optional, Any
+from typing import Dict, Any, Optional, List
 import google.genai as genai
-from google.genai.types import GenerateContentConfig
-from google.api_core import exceptions as google_exceptions
+from core.config import get_api_key
+
+logger = logging.getLogger(__name__)
+
+# Global client instance
+_client = None
+_last_request_time = 0
+_request_count = 0
+_daily_request_count = 0
+_daily_reset_time = 0
+
+# Rate limiting constants
+REQUESTS_PER_MINUTE = 10  # gemini-2.5-flash-lite limit
+REQUESTS_PER_DAY = 1000   # Conservative daily limit
+MIN_REQUEST_INTERVAL = 60 / REQUESTS_PER_MINUTE  # 6 seconds between requests
 
 
-class GeminiAPIError(Exception):
-    """Custom exception for Gemini API related errors."""
-    pass
+def _initialize_client():
+    """Initialize the Gemini client if not already initialized"""
+    global _client
+    if _client is None:
+        api_key = get_api_key()
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY not found in environment variables")
+        
+        genai.configure(api_key=api_key)
+        _client = genai.GenerativeModel('gemini-2.5-flash-lite')
+        logger.info("Gemini client initialized successfully")
 
 
-class GeminiClient:
+def _check_rate_limits():
+    """Check and enforce rate limits"""
+    global _last_request_time, _request_count, _daily_request_count, _daily_reset_time
+    
+    current_time = time.time()
+    
+    # Reset daily counter if it's a new day
+    if current_time - _daily_reset_time > 86400:  # 24 hours
+        _daily_request_count = 0
+        _daily_reset_time = current_time
+    
+    # Check daily limit
+    if _daily_request_count >= REQUESTS_PER_DAY:
+        raise Exception("Daily API request limit exceeded. Please try again tomorrow.")
+    
+    # Check per-minute rate limit
+    time_since_last_request = current_time - _last_request_time
+    if time_since_last_request < MIN_REQUEST_INTERVAL:
+        sleep_time = MIN_REQUEST_INTERVAL - time_since_last_request
+        logger.info(f"Rate limiting: sleeping for {sleep_time:.2f} seconds")
+        time.sleep(sleep_time)
+    
+    _last_request_time = time.time()
+    _request_count += 1
+    _daily_request_count += 1
+
+
+def generate_response(prompt: str, context: str = "", conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
     """
-    Client for interacting with Google Gemini 1.5 Flash LLM.
+    Main API call to Gemini
     
-    Handles conversation context management, error handling, and retry logic
-    for generating AI responses in the insurance agent.
+    Args:
+        prompt: The user's message or system prompt
+        context: Additional context for the conversation
+        conversation_history: List of previous messages in format [{"role": "user/model", "content": "..."}]
+    
+    Returns:
+        Generated response from Gemini
     """
-    
-    def __init__(self):
-        self.client = None
-        self.model = None
-        self.model_name = "gemini-1.5-flash"
-        self.temperature = 0.7
-        self.max_tokens = 1024
-        self.timeout_seconds = 30
-        self.max_retries = 3
-        self.retry_delays = [1, 2, 4]  # Exponential backoff delays in seconds
-    
-    def initialize_client(self, api_key: Optional[str] = None) -> None:
-        try:
-            if api_key is None:
-                api_key = os.getenv('GOOGLE_API_KEY')
+    try:
+        _initialize_client()
+        _check_rate_limits()
+        
+        # Build the full prompt with context
+        full_prompt = prompt
+        if context:
+            full_prompt = f"{context}\n\n{prompt}"
+        
+        # If we have conversation history, use chat mode
+        if conversation_history:
+            # Convert conversation history to Gemini format
+            chat_history = []
+            for msg in conversation_history:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role and content:
+                    chat_history.append({"role": role, "parts": [content]})
             
-            if not api_key:
-                raise GeminiAPIError(
-                    "Google API key is required. Set GOOGLE_API_KEY environment variable "
-                    "or pass api_key parameter."
-                )
-            
-            # Initialize the client
-            self.client = genai.Client(api_key=api_key)
-            
-            # Configure generation settings
-            self.generation_config = GenerateContentConfig(
-                temperature=self.temperature,
-                max_output_tokens=self.max_tokens,
-                top_p=0.8,
-                top_k=40
-            )
-            
-            self.model = True  # Flag to indicate initialization
-            
-            # Test the connection with a simple request
-            self._test_connection()
-            
-        except Exception as e:
-            if isinstance(e, GeminiAPIError):
-                raise
-            raise GeminiAPIError(f"Failed to initialize Gemini client: {str(e)}")
-    
-    def generate_response(
-        self, 
-        messages: List[Dict[str, str]], 
-        system_prompt: Optional[str] = None
-    ) -> str:
-        """
-        Generate a response using the Gemini model.
-        
-        Args:
-            messages: List of conversation messages with 'role' and 'content' keys. Role should be 'user' or 'model' (model = agent).
-            system_prompt: Optional system prompt to guide the conversation.
-            
-        Returns:
-            Generated response text from the model.
-        """
-        if self.model is None:
-            raise GeminiAPIError("Gemini client not initialized. Call initialize_client() first.")
-        
-        if not messages:
-            raise GeminiAPIError("Messages list cannot be empty.")
-        
-        # Validate message format
-        for msg in messages:
-            if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
-                raise GeminiAPIError("Each message must be a dict with 'role' and 'content' keys.")
-            if msg['role'] not in ['user', 'model']:
-                raise GeminiAPIError("Message role must be 'user' or 'model'.")
-        
-        try:
-            conversation_context = self._prepare_conversation_context(messages, system_prompt)
-            response = self._generate_with_retry(conversation_context)
-            
-            return response
-            
-        except Exception as e:
-            error_msg = self.handle_api_error(e)
-            raise GeminiAPIError(error_msg)
-    
-    def handle_api_error(self, error: Exception) -> str:
-        if isinstance(error, google_exceptions.ResourceExhausted):
-            return "I'm currently experiencing high demand. Please try again in a moment."
-        
-        elif isinstance(error, google_exceptions.Unauthenticated):
-            return "Authentication failed. Please check your API configuration."
-        
-        elif isinstance(error, google_exceptions.PermissionDenied):
-            return "Access denied. Please verify your API permissions."
-        
-        elif isinstance(error, google_exceptions.DeadlineExceeded):
-            return "Request timed out. Please try again."
-        
-        elif isinstance(error, google_exceptions.ServiceUnavailable):
-            return "I'm temporarily unavailable. Please try again in a moment."
-        
-        elif isinstance(error, google_exceptions.TooManyRequests):
-            return "Too many requests. Please wait a moment before trying again."
-        
-        elif "safety" in str(error).lower():
-            return "I cannot provide a response to that request. Please try rephrasing your question."
-        
+            # Start chat with history
+            chat = _client.start_chat(history=chat_history)
+            response = chat.send_message(full_prompt)
         else:
-            # Generic error message for unknown errors
-            return "I encountered an unexpected issue. Please try again or contact support if the problem persists."
-    
-    def _test_connection(self) -> None:
-        try:
-            test_content = "Hello"
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=test_content,
-                config=self.generation_config
-            )
-            if not response or not response.text:
-                raise GeminiAPIError("Connection test failed: No response received")
-        except Exception as e:
-            raise GeminiAPIError(f"Connection test failed: {str(e)}")
-    
-    def _prepare_conversation_context(
-        self, 
-        messages: List[Dict[str, str]], 
-        system_prompt: Optional[str] = None
-    ) -> str:
-        """
-        Prepare the conversation context for the Gemini model.
-        
-        Args:
-            messages: List of conversation messages.
-            system_prompt: Optional system prompt.
-            
-        Returns:
-            Formatted conversation context string.
-        """
-        context_parts = []
-        
-        # Add system prompt if provided
-        if system_prompt:
-            context_parts.append(f"System: {system_prompt}\n")
-        
-        # Add conversation history
-        for msg in messages:
-            role = "Human" if msg['role'] == 'user' else "Assistant"
-            context_parts.append(f"{role}: {msg['content']}")
-        
-        # Add prompt for the next response
-        context_parts.append("Assistant:")
-        
-        return "\n".join(context_parts)
-    
-    def _generate_with_retry(self, conversation_context: str) -> str:
-        """
-        Generate response with retry logic for handling transient failures.
-        
-        Args:
-            conversation_context: Formatted conversation context.
-            
-        Returns:
-            Generated response text.
-            
-        Raises:
-            Exception: If all retry attempts fail.
-        """
-        last_exception = None
-        
-        for attempt in range(self.max_retries):
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=conversation_context,
-                    config=self.generation_config
+            # Single message generation
+            response = _client.generate_content(
+                full_prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=1024,
                 )
-                
-                if response and response.text:
-                    return response.text.strip()
-                else:
-                    raise GeminiAPIError("Empty response received from model")
-                    
-            except Exception as e:
-                last_exception = e
-                
-                # Check if this is a retryable error
-                if not self._is_retryable_error(e):
-                    raise e
-                
-                # If not the last attempt, wait before retrying
-                if attempt < self.max_retries - 1:
-                    delay = self.retry_delays[min(attempt, len(self.retry_delays) - 1)]
-                    time.sleep(delay)
+            )
         
-        # If we get here, all retries failed
-        raise last_exception
-    
-    def _is_retryable_error(self, error: Exception) -> bool:
-        retryable_errors = (
-            google_exceptions.DeadlineExceeded,
-            google_exceptions.ServiceUnavailable,
-            google_exceptions.InternalServerError,
-            google_exceptions.TooManyRequests,
-        )
+        return format_response(response.text)
         
-        return isinstance(error, retryable_errors)
+    except Exception as e:
+        return handle_api_error(e)
+
+
+def format_response(raw_response: str) -> str:
+    """
+    Process and format API response
     
-    def is_initialized(self) -> bool:
-        return self.client is not None and self.model is not None
+    Args:
+        raw_response: Raw response text from Gemini
     
-    def get_model_info(self) -> Dict[str, Any]:
-        return {
-            "model_name": self.model_name,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "timeout_seconds": self.timeout_seconds,
-            "max_retries": self.max_retries,
-            "initialized": self.is_initialized()
-        }
+    Returns:
+        Formatted response text
+    """
+    if not raw_response:
+        return "I apologize, but I didn't receive a proper response. Could you please try again?"
+    
+    # Basic formatting - remove excessive whitespace and ensure proper line breaks
+    formatted = raw_response.strip()
+    
+    # Ensure response isn't too long (truncate if necessary)
+    max_length = 2000
+    if len(formatted) > max_length:
+        formatted = formatted[:max_length] + "..."
+        logger.warning(f"Response truncated from {len(raw_response)} to {max_length} characters")
+    
+    return formatted
+
+
+def handle_api_error(error: Exception) -> str:
+    """
+    Basic error handling for API failures
+    
+    Args:
+        error: The exception that occurred
+    
+    Returns:
+        User-friendly error message
+    """
+    error_str = str(error).lower()
+    
+    # Handle specific error types
+    if "429" in error_str or "resource exhausted" in error_str or "quota exceeded" in error_str:
+        logger.warning(f"Rate limit exceeded: {error}")
+        return "I'm receiving too many requests right now. Please wait a moment and try again."
+    
+    elif "401" in error_str or "unauthorized" in error_str or "api key" in error_str:
+        logger.error(f"Authentication error: {error}")
+        return "There's an issue with the API configuration. Please check your settings."
+    
+    elif "400" in error_str or "bad request" in error_str:
+        logger.error(f"Bad request error: {error}")
+        return "I couldn't process your request. Could you please rephrase it?"
+    
+    elif "timeout" in error_str or "connection" in error_str:
+        logger.error(f"Connection error: {error}")
+        return "I'm having trouble connecting right now. Please try again in a moment."
+    
+    else:
+        logger.error(f"Unexpected Gemini API error: {error}")
+        return "Sorry, I'm having trouble processing your request right now. Please try again."
+
+
+def get_client_info() -> Dict[str, Any]:
+    """
+    Get information about the current client configuration
+    
+    Returns:
+        Dictionary with client configuration details
+    """
+    return {
+        "model_name": "gemini-2.5-flash-lite",
+        "temperature": 0.7,
+        "max_tokens": 1024,
+        "initialized": _client is not None,
+        "requests_per_minute_limit": REQUESTS_PER_MINUTE,
+        "requests_per_day_limit": REQUESTS_PER_DAY,
+        "daily_requests_made": _daily_request_count
+    }
