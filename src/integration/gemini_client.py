@@ -7,7 +7,7 @@ import logging
 import time
 from typing import Dict, Any, Optional, List
 import google.genai as genai
-from src.core.config import get_api_key
+from src.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +25,10 @@ MIN_REQUEST_INTERVAL = 60 / REQUESTS_PER_MINUTE  # 6 seconds between requests
 
 
 def _initialize_client():
-    """Initialize the Gemini client if not already initialized"""
     global _client
     if _client is None:
-        api_key = get_api_key()
+        config_settings = get_settings()
+        api_key = config_settings.google_api_key
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not found in environment variables")
         
@@ -37,7 +37,6 @@ def _initialize_client():
 
 
 def _check_rate_limits():
-    """Check and enforce rate limits"""
     global _last_request_time, _request_count, _daily_request_count, _daily_reset_time
     
     current_time = time.time()
@@ -84,15 +83,22 @@ def generate_response(prompt: str, context: str = "", conversation_history: Opti
         if context:
             full_prompt = f"{context}\n\n{prompt}"
         
-        # For now, use a simple generate approach
-        # The google-genai library may have different methods than the older google-generativeai
+        config_settings = get_settings()
+        model = config_settings.model_name
+        temperature = config_settings.temperature
+        max_output_tokens = config_settings.max_tokens
+
+        print(
+            f"Sending prompt to {model}: {full_prompt[:100]}\n Temperature is {temperature}\n Max output tokens is: {max_output_tokens}"
+        )
+
         response = _client.models.generate_content(
-            model='gemini-2.5-flash-lite',
+            model=model,
             contents=[{"role": "user", "parts": [{"text": full_prompt}]}],
-            config={
-                "temperature": 0.7,
-                "max_output_tokens": 1024,
-            }
+            config=genai.types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=max_output_tokens
+            )
         )
         
         # Extract text from response

@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 from src.core.models import ConversationStateData, UserInfo
 from src.core.conversation_flow_manager import process_message
-from src.core.config import validate_required_config, get_api_key
+from src.core.config import get_settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,9 +18,13 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Application entry point"""
+
+    config_settings =  get_settings()
+    title = config_settings.app_title
+
     try:
         st.set_page_config(
-            page_title="Sentinel Insurance Agent",
+            page_title=title,
             page_icon="🛡️",
             layout="wide"
         )
@@ -34,18 +38,6 @@ def main():
         except Exception as e:
             logger.error(f"Session initialization error: {e}")
             st.error("Failed to initialize the application. Please refresh the page.")
-            st.stop()
-        
-        # Check configuration
-        try:
-            if not validate_required_config():
-                st.error("⚠️ Configuration Error: Please check your .env file and ensure GOOGLE_API_KEY is set.")
-                st.info("Create a .env file in the project root with your Google API key:")
-                st.code("GOOGLE_API_KEY=your_api_key_here")
-                st.stop()
-        except Exception as e:
-            logger.error(f"Configuration validation error: {e}")
-            st.error("Unable to validate configuration. Please check your .env file.")
             st.stop()
         
         # Display conversation history
