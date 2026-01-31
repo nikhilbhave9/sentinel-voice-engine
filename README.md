@@ -1,6 +1,6 @@
-# 🛡️ Sentinel Insurance Agent - Simplified
+# Sentinel Insurance Agent
 
-A streamlined conversational AI insurance agent built with Streamlit and Google Gemini. This simplified version provides intelligent customer support for insurance inquiries through a clean, maintainable codebase.
+A streamlined conversational AI insurance agent built with Streamlit and Google Gemini. This agent provides intelligent customer support for insurance inquiries (either new sale or support for existing customer)
 
 ## ✨ Features
 
@@ -13,7 +13,7 @@ A streamlined conversational AI insurance agent built with Streamlit and Google 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Python 3.8 or higher**
+- **Python 3.10 or higher**
 - **Google Gemini API key** ([Get your free API key](https://makersuite.google.com/app/apikey))
 
 ### Installation
@@ -156,39 +156,3 @@ streamlit run app.py --server.port 8502
 2. Verify all files are present in the project structure
 3. Ensure your `.env` file has the correct format
 4. Try creating a fresh virtual environment
-
-## 🛠️ Development
-
-This is a simplified version of the Sentinel Insurance Agent, focusing on core functionality with minimal complexity.
-
-### Key Design Principles
-- **Simplicity**: Minimal file structure and dependencies
-- **Maintainability**: Clear separation of concerns
-- **Functionality**: All essential features preserved
-- **Streamlit-native**: Uses built-in session state management
-
-### File Count: 9 Core Files
-1. `app.py` - Main application
-2. `src/core/config.py` - Configuration
-3. `src/core/conversation_flow_manager.py` - Conversation logic
-4. `src/core/models.py` - Data models
-5. `src/core/prompts.py` - AI prompts
-6. `src/core/tools.py` - Function tools
-7. `src/integration/gemini_client.py` - API client
-8. `requirements.txt` - Dependencies
-9. `README.md` - Documentation
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 🙏 Acknowledgments
-
-- **Google Gemini**: For the AI language model
-- **Streamlit**: For the web application framework
-
----
-
-**🛡️ Sentinel Insurance Agent** - Simplified AI insurance assistance
