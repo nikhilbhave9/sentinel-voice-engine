@@ -83,6 +83,8 @@ def generate_response(prompt: str, context: str = "", conversation_history: Opti
         if context:
             full_prompt = f"{context}\n\n{prompt}"
         
+        print(f"Sending prompt to Gemini: {full_prompt}...")
+
         config_settings = get_settings()
         model = config_settings.model_name
         temperature = config_settings.temperature

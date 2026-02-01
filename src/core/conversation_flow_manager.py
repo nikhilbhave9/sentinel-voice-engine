@@ -8,99 +8,15 @@ from typing import Dict, Any, Optional, List, Tuple
 import logging
 import re
 from .models import ConversationState, UserInfo, ConversationStateData
+from .prompts import (
+    get_system_prompt, 
+    get_intent_patterns, 
+    get_info_extraction_patterns,
+    INTENT_PATTERNS
+)
 from src.integration.gemini_client import generate_response
 
 logger = logging.getLogger(__name__)
-
-# Intent patterns for classification
-INTENT_PATTERNS = {
-    "greeting": [
-        r"\b(hello|hi|hey|good morning|good afternoon|good evening)\b",
-        r"\b(start|begin|new conversation)\b",
-        r"^(hi|hello|hey)[\s!.]*$",
-    ],
-    "support": [
-        r"\b(help|support|assistance|problem|issue|trouble)\b",
-        r"\b(claim|policy|coverage|benefits)\b",
-        r"\b(can't|cannot|unable|difficulty|error)\b",
-        r"\b(fix|resolve|solve|repair)\b",
-        r"\b(existing|current|my policy)\b",
-    ],
-    "sales": [
-        r"\b(buy|purchase|get|want|need|interested)\b.*\b(insurance|policy|coverage)\b",
-        r"\b(quote|price|cost|rate|premium)\b",
-        r"\b(new|additional|more) (insurance|policy|coverage)\b",
-        r"\b(auto|car|home|life|health) insurance\b",
-        r"\b(sign up|enroll|apply)\b",
-    ]
-}
-
-# System prompts for different states
-SYSTEM_PROMPTS = {
-    "greeting": """You are Sentinel, a helpful AI insurance agent. You are greeting a new customer or continuing a conversation. 
-
-Your role is to:
-- Welcome customers warmly and professionally
-- Understand what they need help with (support for existing policies or sales for new insurance)
-- Guide them to the appropriate conversation flow
-- Collect basic information like their name if they haven't provided it
-
-Keep responses friendly, concise, and focused on understanding their needs. Ask clarifying questions to determine if they need support with existing policies or are interested in new insurance products.""",
-    
-    "support_flow": """You are Sentinel, a helpful AI insurance agent in support mode. The customer needs help with their existing insurance policy or has questions about their coverage.
-
-Your role is to:
-- Help with policy questions, claims, coverage details, and account issues
-- Collect relevant information like policy numbers when needed
-- Provide clear explanations about their benefits and coverage
-- Guide them through processes like filing claims or updating their information
-- Escalate complex issues to human agents when appropriate
-
-Be empathetic, thorough, and solution-focused. Always prioritize the customer's immediate needs and concerns.""",
-    
-    "sales_flow": """You are Sentinel, a helpful AI insurance agent in sales mode. The customer is interested in purchasing new insurance or learning about insurance products.
-
-Your role is to:
-- Understand their insurance needs and current situation
-- Explain different types of insurance products available
-- Provide general information about coverage options and benefits
-- Collect basic information to help determine their needs
-- Guide them toward getting quotes or speaking with a sales specialist
-
-Be informative, helpful, and consultative. Focus on understanding their needs rather than being pushy. Provide educational information to help them make informed decisions.""",
-    
-    "error_handling": """You are Sentinel, a helpful AI insurance agent in error recovery mode. Something went wrong, but you're here to help get the conversation back on track.
-
-Your role is to:
-- Acknowledge any issues that occurred
-- Reassure the customer that you're here to help
-- Determine what they were trying to accomplish
-- Guide them back to the appropriate conversation flow
-- Provide alternative ways to get help if needed
-
-Be apologetic for any inconvenience, patient, and focused on resolving their needs despite the technical issue."""
-}
-
-# Information extraction patterns
-INFO_EXTRACTION_PATTERNS = {
-    'name': [
-        r"(?:my name is|i'm|i am|call me)\s+([a-zA-Z\s]{2,30}?)(?:\s+and|\s*,|\s*$)",
-        r"^([a-zA-Z\s]{2,30}?)(?:\s+here|$)",  # Simple name at start
-    ],
-    'policy_number': [
-        r"(?:policy number|policy|number)\s*(?:is|:)?\s*([a-zA-Z0-9\-]+)",
-        r"\b([a-zA-Z]{2,3}\d{6,10})\b",  # Common policy format
-        r"\b(\d{8,12})\b",  # Numeric policy
-    ],
-    'contact_info': [
-        r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",  # Email
-        r"(\+?1?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4})",  # Phone
-    ],
-    'inquiry_type': [
-        r"\b(support|help|assistance|problem|issue|claim)\b",
-        r"\b(sales|buy|purchase|quote|new policy|insurance)\b",
-    ]
-}
 
 
 def process_message(message: str, state: ConversationStateData) -> Dict[str, Any]:
@@ -129,7 +45,7 @@ def process_message(message: str, state: ConversationStateData) -> Dict[str, Any
                     setattr(state.user_info, field, extracted_value)
         
         # Get system prompt for current state
-        system_prompt = SYSTEM_PROMPTS.get(new_state, SYSTEM_PROMPTS["greeting"])
+        system_prompt = get_system_prompt(new_state)
         
         # Build context from conversation history
         context = _build_context(state, extracted_info)
@@ -173,7 +89,7 @@ def extract_user_info(message: str, field_name: str) -> Optional[str]:
     if not isinstance(message, str) or not isinstance(field_name, str) or not message.strip():
         return None
     
-    patterns = INFO_EXTRACTION_PATTERNS.get(field_name, [])
+    patterns = get_info_extraction_patterns(field_name)
     
     for pattern in patterns:
         # Use original message for extraction, not lowercased version
@@ -219,7 +135,7 @@ def determine_intent(message: str) -> str:
     intent_priority = ["support", "sales", "greeting"]
     
     for intent in intent_priority:
-        patterns = INTENT_PATTERNS.get(intent, [])
+        patterns = get_intent_patterns(intent)
         for pattern in patterns:
             if re.search(pattern, message_lower, re.IGNORECASE):
                 return intent
