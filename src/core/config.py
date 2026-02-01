@@ -36,6 +36,63 @@ class Settings(BaseSettings):
         description="Max response length"
     )
 
+    # --- Optional: Voice STT Configuration ---
+    voice_stt_model: str = Field(
+        default="base",
+        description="Faster-Whisper model size (tiny/base/small/medium/large)"
+    )
+    
+    voice_stt_device: str = Field(
+        default="cpu",
+        description="Device for STT (cpu/cuda)"
+    )
+    
+    voice_stt_compute_type: str = Field(
+        default="int8",
+        description="Compute type for STT (int8/float16/float32)"
+    )
+
+    # --- Optional: Voice TTS Configuration ---
+    voice_tts_model: str = Field(
+        default="tts_models/multilingual/multi-dataset/xtts_v2",
+        description="XTTS model path"
+    )
+    
+    voice_tts_language: str = Field(
+        default="en",
+        description="TTS language code"
+    )
+    
+    voice_tts_speed: float = Field(
+        default=1.0,
+        ge=0.5, le=2.0,
+        description="Speech speed multiplier"
+    )
+
+    # --- Optional: Voice Pipeline Configuration ---
+    voice_silence_threshold: float = Field(
+        default=0.5,
+        ge=0.0, le=1.0,
+        description="Silence detection threshold (0-1)"
+    )
+    
+    voice_silence_duration: float = Field(
+        default=0.8,
+        ge=0.1, le=3.0,
+        description="Silence duration in seconds before processing"
+    )
+    
+    voice_max_sentences: int = Field(
+        default=2,
+        ge=1, le=5,
+        description="Maximum sentences per response"
+    )
+    
+    voice_enabled: bool = Field(
+        default=True,
+        description="Enable/disable voice features"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",              # Read from .env file
         env_file_encoding="utf-8",
