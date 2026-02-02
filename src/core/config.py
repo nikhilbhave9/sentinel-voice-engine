@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # --- Optional: LLM settings ---
     model_name: str = Field(
-        default="gemini-2.5-flash-lite",
+        default="gemini-2.5-flash",
         description="LLM model to use"
     )
 

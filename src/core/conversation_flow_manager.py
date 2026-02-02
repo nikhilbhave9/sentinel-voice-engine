@@ -19,37 +19,37 @@ from src.integration.gemini_client import generate_response
 logger = logging.getLogger(__name__)
 
 
-def detect_escalation_from_tool_result(tool_result: Any) -> bool:
-    """
-    Detect if a tool result indicates escalation is needed.
+# def detect_escalation_from_tool_result(tool_result: Any) -> bool:
+#     """
+#     Detect if a tool result indicates escalation is needed.
     
-    Handles both dictionary and string tool responses for backward compatibility.
-    Checks for escalation_required field, status="not_supported", and action="escalate".
+#     Handles both dictionary and string tool responses for backward compatibility.
+#     Checks for escalation_required field, status="not_supported", and action="escalate".
     
-    Args:
-        tool_result: The result returned from a tool call
+#     Args:
+#         tool_result: The result returned from a tool call
     
-    Returns:
-        True if escalation is required, False otherwise
-    """
-    # Handle dictionary responses (new structured format)
-    if isinstance(tool_result, dict):
-        # Check explicit escalation_required field
-        if tool_result.get("escalation_required", False):
-            return True
-        # Check status field for "not_supported"
-        if tool_result.get("status") == "not_supported":
-            return True
-        # Check action field for "escalate"
-        if tool_result.get("action") == "escalate":
-            return True
+#     Returns:
+#         True if escalation is required, False otherwise
+#     """
+#     # Handle dictionary responses (new structured format)
+#     if isinstance(tool_result, dict):
+#         # Check explicit escalation_required field
+#         if tool_result.get("escalation_required", False):
+#             return True
+#         # Check status field for "not_supported"
+#         if tool_result.get("status") == "not_supported":
+#             return True
+#         # Check action field for "escalate"
+#         if tool_result.get("action") == "escalate":
+#             return True
     
-    # Handle string responses (legacy format for backward compatibility)
-    if isinstance(tool_result, str):
-        escalation_keywords = ["not_supported", "escalate", "specialist", "human agent"]
-        return any(keyword in tool_result.lower() for keyword in escalation_keywords)
+#     # Handle string responses (legacy format for backward compatibility)
+#     if isinstance(tool_result, str):
+#         escalation_keywords = ["not_supported", "escalate", "specialist", "human agent"]
+#         return any(keyword in tool_result.lower() for keyword in escalation_keywords)
     
-    return False
+#     return False
 
 
 def process_message(message: str, state: ConversationStateData, source: str = "text") -> Dict[str, Any]:
