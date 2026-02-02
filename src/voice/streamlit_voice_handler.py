@@ -5,10 +5,8 @@ import time
 import re
 import wave
 import numpy as np
-from typing import Optional
+from typing import Optional, Tuple
 from pathlib import Path
-
-import src.voice.tts_patch
 
 from faster_whisper import WhisperModel
 from piper import PiperVoice
@@ -17,6 +15,7 @@ import soundfile as sf
 from src.core.conversation_flow_manager import process_message
 from src.core.models import ConversationStateData
 from src.core.config import get_settings
+from src.core.metrics import track_latency
 
 logger = logging.getLogger(__name__)
 
@@ -83,42 +82,55 @@ class StreamlitVoiceHandler:
         return self._tts_model
 
     
-    def transcribe_audio(self, audio_file_path: str) -> str:
-        """Fast transcription with Whisper"""
+    def transcribe_audio(self, audio_file_path: str) -> Tuple[str, float]:
+        """
+        Fast transcription with Whisper, tracking latency.
+        
+        Args:
+            audio_file_path: Path to the audio file to transcribe
+        
+        Returns:
+            Tuple of (transcription text, latency in milliseconds)
+        """
         try:
             logger.info(f"Transcribing: {audio_file_path}")
             
-            segments, info = self.stt_model.transcribe(
-                audio_file_path,
-                beam_size=1,  # Fast beam search
-                language="en",
-                vad_filter=True,
-                vad_parameters=dict(
-                    threshold=0.5,
-                    min_silence_duration_ms=500
+            # Track STT latency
+            with track_latency("STT") as timer:
+                segments, info = self.stt_model.transcribe(
+                    audio_file_path,
+                    beam_size=1,  # Fast beam search
+                    language="en",
+                    vad_filter=True,
+                    vad_parameters=dict(
+                        threshold=0.5,
+                        min_silence_duration_ms=500
+                    )
                 )
-            )
+                
+                transcription = " ".join([segment.text for segment in segments])
+                transcription = transcription.strip()
             
-            transcription = " ".join([segment.text for segment in segments])
-            transcription = transcription.strip()
+            # Get elapsed time
+            latency_ms = timer()
             
-            logger.info(f"Transcribed: {transcription}")
-            return transcription
+            logger.info(f"Transcribed: {transcription} (latency: {latency_ms:.2f}ms)")
+            return transcription, latency_ms
             
         except Exception as e:
             logger.error(f"Transcription error: {e}", exc_info=True)
             raise
     
-    def synthesize_speech(self, text: str, output_path: str) -> str:
+    def synthesize_speech(self, text: str, output_path: str) -> Tuple[str, float]:
         """
-        Synthesize speech using Piper TTS and save to a WAV file.
+        Synthesize speech using Piper TTS and save to a WAV file, tracking latency.
         
         Args:
             text: Text to synthesize
             output_path: Output WAV file path
 
         Returns:
-            Path to generated audio
+            Tuple of (path to generated audio, latency in milliseconds)
         """
         # Clean and limit text
         logger.info(f"Full text: {text}")
@@ -132,34 +144,40 @@ class StreamlitVoiceHandler:
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
         try:
-            with wave.open(output_path, "wb") as wav_file:
-                first_chunk = True
-                
-                # Iterate through Piper's generator
-                for chunk in self.tts_model.synthesize(limited_text):
-                    # Dynamically set WAV header parameters from the first chunk
-                    if first_chunk:
-                        wav_file.setnchannels(chunk.sample_channels)
-                        wav_file.setsampwidth(chunk.sample_width)
-                        wav_file.setframerate(chunk.sample_rate)
-                        first_chunk = False
+            # Track TTS latency
+            with track_latency("TTS") as timer:
+                with wave.open(output_path, "wb") as wav_file:
+                    first_chunk = True
                     
-                    # Use the specific bytes attr
-                    wav_file.writeframes(chunk.audio_int16_bytes)
+                    # Iterate through Piper's generator
+                    for chunk in self.tts_model.synthesize(limited_text):
+                        # Dynamically set WAV header parameters from the first chunk
+                        if first_chunk:
+                            wav_file.setnchannels(chunk.sample_channels)
+                            wav_file.setsampwidth(chunk.sample_width)
+                            wav_file.setframerate(chunk.sample_rate)
+                            first_chunk = False
+                        
+                        # Use the specific bytes attr
+                        wav_file.writeframes(chunk.audio_int16_bytes)
 
-            # Verify file integrity
-            size = os.path.getsize(output_path)
-            logger.info(f"Audio synthesis complete. Size: {size} bytes")
+                # Verify file integrity
+                size = os.path.getsize(output_path)
+                logger.info(f"Audio synthesis complete. Size: {size} bytes")
 
-            # A valid WAV header is 44 bytes; anything less or equal is empty
-            if size <= 44:
-                raise RuntimeError("Piper produced an empty or invalid audio file")
+                # A valid WAV header is 44 bytes; anything less or equal is empty
+                if size <= 44:
+                    raise RuntimeError("Piper produced an empty or invalid audio file")
+            
+            # Get elapsed time
+            latency_ms = timer()
+            logger.info(f"TTS synthesis latency: {latency_ms:.2f}ms")
 
         except Exception as e:
             logger.error(f"Failed to synthesize speech: {str(e)}")
             raise e
 
-        return output_path
+        return output_path, latency_ms
     
     def _limit_sentences(self, text: str) -> str:
         """
