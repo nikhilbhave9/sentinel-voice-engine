@@ -314,8 +314,6 @@ def render_live_transcription():
     - Agent responses in green with [SENTINEL] label
     - Chronological order
     - Real-time updates using st.empty()
-    
-    Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
     """
     st.markdown("### 📡 LIVE TRANSCRIPTION")
     
@@ -362,8 +360,6 @@ def main():
        - Left: Voice Interface (with clickable orb)
        - Right: Live Transcription
     3. Stats Dashboard - Performance metrics (bottom)
-    
-    Requirements: 3.1, 3.2, 3.3, 3.4
     """
     config_settings = get_settings()
     
@@ -383,7 +379,7 @@ def main():
         unsafe_allow_html=True
     )
     st.markdown(
-        "<p style='text-align: center; font-style: italic;'>First-line agentic AI insurance query resolver</p>",
+        "<p style='text-align: center; font-style: italic;'>First-line agentic AI insurance query resolution</p>",
         unsafe_allow_html=True
     )
     st.markdown("---")
@@ -493,8 +489,6 @@ def play_welcome_message():
     Generates the welcome message "Hello! I'm Sentinel. How can I help you today?",
     synthesizes it using TTS, stores the audio in session state for autoplay,
     and adds the message to conversation history.
-    
-    Requirements: 11.1, 11.2, 11.3, 11.4, 11.5
     """
     try:
         welcome_text = "Hello! I'm Sentinel. How can I help you today?"
@@ -555,19 +549,8 @@ def render_voice_interface():
 
     # ---- LOAD MODELS ----
     if not st.session_state.models_loaded:
-        # Enhanced initialization UI
-        st.markdown("""
-        <div style="text-align: center; padding: 60px 20px; background: linear-gradient(135deg, #1a1f35 0%, #2d3250 100%); 
-                    border-radius: 20px; border: 2px solid #4c566a; margin: 20px 0; min-height: 600px;
-                    display: flex; flex-direction: column; justify-content: center; align-items: center;">
-            <div style="font-size: 5rem; margin-bottom: 30px; filter: drop-shadow(0 0 20px rgba(136, 192, 208, 0.5));">🛡️</div>
-            <h2 style="color: #88c0d0; margin-bottom: 15px; font-weight: 600; font-size: 2rem;">VOICE SYSTEMS OFFLINE</h2>
-            <p style="color: #d8dee9; font-size: 1.2rem; margin-bottom: 40px; opacity: 0.9;">Initialize speech/text models to begin (load time: 5-7 seconds)</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Center the button
-        if st.button("INITIALIZE VOICE SYSTEMS", type="primary", use_container_width=True):
+        # Initialization button
+        if st.button("INITIALIZE SPEECH MODELS", type="primary", use_container_width=True):
             with st.spinner("⚡ Loading voice models (~15 seconds)..."):
                 try:
                     st.session_state.voice_handler = StreamlitVoiceHandler(
@@ -583,6 +566,17 @@ def render_voice_interface():
                 except Exception as e:
                     logger.error(f"Model loading error: {e}", exc_info=True)
                     st.error(f"Failed to load: {e}")
+        
+        # Enhanced initialization UI below button (reduced margins for alignment)
+        st.markdown("""
+        <div style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #1a1f35 0%, #2d3250 100%); 
+                    border-radius: 20px; border: 2px solid #4c566a; margin: 10px 0 20px 0; min-height: 450px;
+                    display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <div style="font-size: 5rem; margin-bottom: 30px; filter: drop-shadow(0 0 20px rgba(136, 192, 208, 0.5));">🛡️</div>
+            <h2 style="color: #88c0d0; margin-bottom: 15px; font-weight: 600; font-size: 2rem;">VOICE SYSTEMS OFFLINE</h2>
+            <p style="color: #d8dee9; font-size: 1.2rem; margin-bottom: 20px; opacity: 0.9;">Click the button above to initialize speech recognition and synthesis</p>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
     # ---- BEAUTIFUL VOICE INTERFACE WITH CLICKABLE ORB ----
