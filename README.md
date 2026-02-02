@@ -85,6 +85,28 @@ Which of these works best for you?
 has been booked.
 ```
 
+## Voice Setup (Optional)
+
+For first-time setup, you can run the voice setup script to download and verify models:
+
+```bash
+# Make the script executable
+chmod +x src/voice/setup_voice.sh
+
+# Run the setup script
+./src/voice/setup_voice.sh
+```
+
+**What the script does:**
+- ✅ Verifies Python 3.11+ and virtual environment
+- ✅ Checks disk space (requires ~1GB)
+- ✅ Verifies Piper TTS models exist locally (`en_US-lessac-medium.onnx`)
+- ✅ Downloads Whisper tiny model (~75MB, cached in `~/.cache/huggingface/`)
+- ✅ Tests both STT and TTS loading
+- ✅ Displays performance expectations
+
+**Note:** The script is optional. The app will automatically download models on first run if you skip this step.
+
 ## Configuration
 
 ### Environment Variables
