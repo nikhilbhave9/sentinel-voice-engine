@@ -61,6 +61,30 @@ The application will be available at `http://localhost:8501`
 - Say "I'm interested in insurance" or "I want to buy coverage"
 - Discuss your insurance needs and get policy information
 
+### Sample Conversation
+
+Here's an example of a typical sales conversation with Sentinel:
+
+```
+[SENTINEL] Hello! I'm Sentinel. How can I help you today?
+
+[USER] Hi, my name is Bob. I want a new fire insurance policy.
+
+[SENTINEL] Hi Bob! I can definitely help you with a new home insurance policy. 
+Could you please share your phone number so I can check for available consultation slots?
+
+[USER] Sure. My phone number is 11111111111111.
+
+[SENTINEL] Great! Thanks, Bob. I see a few open slots for a home insurance consultation: 
+Monday at 10:00 AM, Tuesday at 2:00 PM, and Wednesday at 4:30 PM. 
+Which of these works best for you?
+
+[USER] Monday at 10 AM works best for me.
+
+[SENTINEL] Great! Your appointment for a fire insurance consultation on Monday at 10:00 AM 
+has been booked.
+```
+
 ## ⚙️ Configuration
 
 ### Environment Variables
