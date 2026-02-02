@@ -1,9 +1,11 @@
 streamlit
+streamlit-audiorecorder
 pipecat-ai
 
 torch
 torchaudio
 TTS<0.23
+faster-whisper
 
 sounddevice
 soundfile

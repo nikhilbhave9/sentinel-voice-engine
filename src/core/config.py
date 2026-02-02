@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     )
     
     max_tokens: int = Field(
-        default=80,  # ~60 words = 2 sentences for voice
+        default=400,  # ~300 words = enough for 2-3 complete sentences with context
         ge=1, 
         le=8192,
         description="Max response length"
@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     )
     
     voice_max_sentences: int = Field(
-        default=2,
+        default=3,
         ge=1, le=5,
         description="Maximum sentences per response"
     )
