@@ -19,13 +19,47 @@ from src.integration.gemini_client import generate_response
 logger = logging.getLogger(__name__)
 
 
-def process_message(message: str, state: ConversationStateData) -> Dict[str, Any]:
+def detect_escalation_from_tool_result(tool_result: Any) -> bool:
     """
-    Main message processing logic
+    Detect if a tool result indicates escalation is needed.
+    
+    Handles both dictionary and string tool responses for backward compatibility.
+    Checks for escalation_required field, status="not_supported", and action="escalate".
+    
+    Args:
+        tool_result: The result returned from a tool call
+    
+    Returns:
+        True if escalation is required, False otherwise
+    """
+    # Handle dictionary responses (new structured format)
+    if isinstance(tool_result, dict):
+        # Check explicit escalation_required field
+        if tool_result.get("escalation_required", False):
+            return True
+        # Check status field for "not_supported"
+        if tool_result.get("status") == "not_supported":
+            return True
+        # Check action field for "escalate"
+        if tool_result.get("action") == "escalate":
+            return True
+    
+    # Handle string responses (legacy format for backward compatibility)
+    if isinstance(tool_result, str):
+        escalation_keywords = ["not_supported", "escalate", "specialist", "human agent"]
+        return any(keyword in tool_result.lower() for keyword in escalation_keywords)
+    
+    return False
+
+
+def process_message(message: str, state: ConversationStateData, source: str = "text") -> Dict[str, Any]:
+    """
+    Main message processing logic with automatic escalation detection
     
     Args:
         message: User's input message
         state: Current conversation state data
+        source: Source of the message (voice/text), defaults to "text"
     
     Returns:
         Dictionary containing response, new_state, and extracted_info
@@ -57,17 +91,62 @@ def process_message(message: str, state: ConversationStateData) -> Dict[str, Any
         system_prompt = get_system_prompt(new_state)
         
         full_prompt = f"{system_prompt}{action_nudge}{trigger_context}\n\nUser: {message}"
-        response = generate_response(full_prompt, context, state.conversation_history)
+        llm_result = generate_response(full_prompt, context, state.conversation_history)
+        
+        # Extract response text and metadata
+        response = llm_result.get("response", "")
+        llm_latency_ms = llm_result.get("latency_ms", 0.0)
+        token_count = llm_result.get("token_count", 0)
+        model_name = llm_result.get("model_name", "")
+        
+        # 6. Check for escalation indicators in the response
+        # Since automatic function calling is enabled, tool results are embedded in the response
+        escalation_needed = _detect_escalation_in_response(response)
+        
+        if escalation_needed:
+            # Check if we have the required information for escalation
+            missing_info = []
+            if not state.user_info.name:
+                missing_info.append("name")
+            if not state.user_info.contact_info:
+                missing_info.append("phone number")
+            
+            if missing_info:
+                # Request missing information before escalating
+                missing_fields = " and ".join(missing_info)
+                response = f"{response}\n\nBefore I connect you with a specialist, I'll need your {missing_fields}. Could you please provide that?"
+            else:
+                # We have all required info - trigger escalation
+                escalation_msg = "I'll need a specialist for that. Let me get someone from the department on the line."
+                
+                # Import the tool here to avoid circular imports
+                from src.core.tools import triage_and_escalate
+                
+                # Use the user's original message as the issue description
+                issue_desc = message
+                
+                # Call the escalation tool
+                triage_result = triage_and_escalate(
+                    name=state.user_info.name,
+                    issue_description=issue_desc,
+                    phone=state.user_info.contact_info
+                )
+                
+                # Append escalation message and result to response
+                response = f"{response}\n\n{escalation_msg}\n\n{triage_result}"
             
         # Update conversation history
-        state.add_message("user", message)
-        state.add_message("assistant", response)
+        state.add_message("user", message, source)
+        state.add_message("assistant", response, source)
         
         return {
             "response": response,
             "new_state": new_state,
             "extracted_info": extracted_info,
-            "intent": intent
+            "intent": intent,
+            "llm_latency_ms": llm_latency_ms,
+            "token_count": token_count,
+            "model_name": model_name
         }
         
     except Exception as e:
@@ -76,7 +155,10 @@ def process_message(message: str, state: ConversationStateData) -> Dict[str, Any
             "response": "I apologize, but I'm having trouble processing your message right now. Could you please try again?",
             "new_state": "error_handling",
             "extracted_info": {},
-            "intent": "error"
+            "intent": "error",
+            "llm_latency_ms": 0.0,
+            "token_count": 0,
+            "model_name": ""
         }
 
 
@@ -217,6 +299,40 @@ def _build_context(state, extracted_info: dict = None) -> str:
         context_parts.append("MISSING_REQUIRED: Phone number needed for quote.")
 
     return "\n".join(context_parts)
+
+
+def _detect_escalation_in_response(response: str) -> bool:
+    """
+    Detect if a response contains escalation indicators.
+    
+    This function checks the response text for keywords that indicate
+    an escalation is needed, such as when a tool returns a "not_supported"
+    status or mentions specialist assistance.
+    
+    Args:
+        response: The response text from the LLM
+    
+    Returns:
+        True if escalation indicators are found, False otherwise
+    """
+    if not response:
+        return False
+    
+    response_lower = response.lower()
+    
+    # Check for escalation keywords that would appear in tool responses
+    escalation_indicators = [
+        "requires specialist assistance",
+        "specialist assistance",
+        "not_supported",
+        "operation '",  # Part of the tool response message format
+        "human agent",
+        "escalate",
+        "transfer to specialist",
+        "connect you with a specialist"
+    ]
+    
+    return any(indicator in response_lower for indicator in escalation_indicators)
 
 
 def normalize_policy_number(raw_text: str) -> str:
