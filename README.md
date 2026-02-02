@@ -124,7 +124,6 @@ sentinel-voice-engine/
 ### Where the agent struggles
 - The "tiny" Whisper STT model sacrifices accuracy for speed. Unless the user speaks moderately slow, at a consistent pace, the model is likely to miss a couple of words or get the spelling wrong. 
 
-
 ### Improvements made
 - To enforce a 2-3 second "conversational" tone of the agent, I tried using an 80 token limit on the max-output. Responses were cutting off mid-sentence, as this max-output tokens parameter doesn't factor into the response generation.  Identified FinishReason.MAX_TOKENS through the response object and increased the limit to 400, while adding a BREVITY_MESSAGE to every system prompt to ensure conciseness 
 
