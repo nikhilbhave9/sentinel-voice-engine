@@ -31,29 +31,34 @@ def process_message(message: str, state: ConversationStateData) -> Dict[str, Any
         Dictionary containing response, new_state, and extracted_info
     """
     try:
-        # Determine intent and next state
+        # 1. Detect Intent
         intent = determine_intent(message)
-        new_state = transition_state(state.current_state, intent)
         
-        # Extract user information if present
+        # 2. Extract info BEFORE generating response
         extracted_info = {}
         for field in ['name', 'policy_number', 'contact_info', 'inquiry_type']:
-            if not getattr(state.user_info, field):  # Only extract if not already collected
-                extracted_value = extract_user_info(message, field)
-                if extracted_value:
-                    extracted_info[field] = extracted_value
-                    setattr(state.user_info, field, extracted_value)
+            val = extract_user_info(message, field)
+            if val:
+                setattr(state.user_info, field, val)
+                extracted_info[field] = val
+
+        # 3. Transition State
+        new_state = transition_state(state.current_state, intent)
+        state.current_state = new_state # Update the state object!
+
+        # 4. Build context including the new state
+        context = _build_context(state, extracted_info)
+
+        # 5. Hybrid Context
+        # Tell the LLM specifically what happened in this turn
+        trigger_context = f"\n[SYSTEM NOTE: User intent detected as {intent}. Current State: {new_state}]"
+        action_nudge = "\nInstruction: If you have enough info to call a tool, do it now."
         
-        # Get system prompt for current state
         system_prompt = get_system_prompt(new_state)
         
-        # Build context from conversation history
-        context = _build_context(state, extracted_info)
-        
-        # Generate response using Gemini
-        full_prompt = f"{system_prompt}\n\nUser: {message}"
+        full_prompt = f"{system_prompt}{action_nudge}{trigger_context}\n\nUser: {message}"
         response = generate_response(full_prompt, context, state.conversation_history)
-        
+            
         # Update conversation history
         state.add_message("user", message)
         state.add_message("assistant", response)
@@ -111,6 +116,12 @@ def extract_user_info(message: str, field_name: str) -> Optional[str]:
                 return extracted_lower
             else:
                 # For policy_number and contact_info, preserve original case
+                if field_name == 'contact_info':
+                    return extracted
+                
+                if field_name == 'policy_number':
+                    return normalize_policy_number(extracted)
+
                 return extracted
     
     return None
@@ -171,43 +182,54 @@ def transition_state(current_state: str, intent: str) -> str:
     return current_state if current_state in ["greeting", "support_flow", "sales_flow"] else "greeting"
 
 
-def _build_context(state: ConversationStateData, extracted_info: Dict[str, str]) -> str:
+def _build_context(state, extracted_info: dict = None) -> str:
     """
-    Build context string from conversation state and extracted info
-    
-    Args:
-        state: Current conversation state data
-        extracted_info: Recently extracted user information
-    
-    Returns:
-        Context string for the AI
+    Constructs the context string for the LLM.
+    Combines the long-term state data with any information 
+    just extracted in the current turn.
     """
-    context_parts = []
+    context_parts = ["### INTERNAL AGENT STATE ###"]
     
-    # Add user information context
-    if state.user_info.name:
-        context_parts.append(f"Customer name: {state.user_info.name}")
-    if state.user_info.policy_number:
-        context_parts.append(f"Policy number: {state.user_info.policy_number}")
-    if state.user_info.contact_info:
-        context_parts.append(f"Contact info: {state.user_info.contact_info}")
-    if state.user_info.inquiry_type:
-        context_parts.append(f"Inquiry type: {state.user_info.inquiry_type}")
+    # 1. Pull existing data from state.user_info
+    # We use .get() or getattr() depending on how your state object is structured
+    user_data = {
+        "name": getattr(state.user_info, 'name', None),
+        "phone": getattr(state.user_info, 'contact_info', None),
+        "policy_id": getattr(state.user_info, 'policy_number', None)
+    }
     
-    # Add recently extracted information
+    # 2. Add turn-specific extracted info (to make sure it's fresh)
     if extracted_info:
-        context_parts.append("Recently provided information:")
-        for field, value in extracted_info.items():
-            context_parts.append(f"- {field}: {value}")
+        for key, value in extracted_info.items():
+            if value:
+                user_data[key] = value
+
+    # 3. Format the data string
+    known_data = ", ".join([f"{k}: {v}" for k, v in user_data.items() if v])
+    if known_data:
+        context_parts.append(f"AVAILABLE_DATA: {known_data}")
+        
+    # 4. Add the Current Phase (State Machine position)
+    context_parts.append(f"CURRENT_PHASE: {state.current_state}")
     
-    # Add conversation history context (last few messages)
-    if state.conversation_history:
-        recent_messages = state.conversation_history[-4:]  # Last 2 exchanges
-        if recent_messages:
-            context_parts.append("Recent conversation:")
-            for msg in recent_messages:
-                role = msg.get('role', 'unknown')
-                content = msg.get('content', '')[:100]  # Truncate long messages
-                context_parts.append(f"{role}: {content}")
+    # 5. Add a "Missing Info" nudge if we are in a specific state
+    if state.current_state == "SALES" and not user_data["phone"]:
+        context_parts.append("MISSING_REQUIRED: Phone number needed for quote.")
+
+    return "\n".join(context_parts)
+
+
+def normalize_policy_number(raw_text: str) -> str:
+    """
+    Cleans transcription artifacts like 'P-O-L' or 'P O L' 
+    into a standard format like 'POL'.
+    """
+    if not raw_text:
+        return ""
+
+    # Remove all non-alphanumeric characters (dashes, spaces, dots, etc.)
+    # This turns "P-O-L - 1 2 3" -> "POL123"
+    cleaned = re.sub(r'[^A-Za-z0-9]', '', raw_text)
     
-    return "\n".join(context_parts) if context_parts else ""
+    # Convert to uppercase to match DB keys
+    return cleaned.upper()

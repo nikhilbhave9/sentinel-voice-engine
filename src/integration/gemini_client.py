@@ -8,6 +8,7 @@ import time
 from typing import Dict, Any, Optional, List
 import google.genai as genai
 from src.core.config import get_settings
+from src.core.tools import SENTINEL_TOOL_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -78,42 +79,49 @@ def generate_response(prompt: str, context: str = "", conversation_history: Opti
         _initialize_client()
         _check_rate_limits()
         
-        # Build the full prompt with context
-        full_prompt = prompt
-        if context:
-            full_prompt = f"{context}\n\n{prompt}"
-        
-        print(f"Sending prompt to Gemini: {full_prompt}...")
+        # 1. Prepare history (Ensure we use 'user' and 'model' roles)
+        contents = []
+        if conversation_history:
+            for msg in conversation_history:
+                role = "model" if msg.get("role") in ["assistant", "model"] else "user"
+                text_content = ""
+                if "content" in msg:
+                    text_content = msg["content"]
+                elif "parts" in msg and isinstance(msg["parts"], list):
+                    text_content = msg["parts"][0].get("text", "")
+                if text_content:
+                    contents.append({
+                        "role": role,
+                        "parts": [{"text": text_content}]
+                    })
+
+        # 2. Append current turn with context by wrapping the user prompt with the injected state context
+        user_input = f"CONTEXT:\n{context}\n\nUSER_MESSAGE: {prompt}" if context else prompt
+        contents.append({"role": "user", "parts": [{"text": user_input}]})
 
         config_settings = get_settings()
-        model = config_settings.model_name
-        temperature = config_settings.temperature
-        max_output_tokens = config_settings.max_tokens
 
-        print(
-            f"Sending prompt to {model}: {full_prompt[:100]}\n Temperature is {temperature}\n Max output tokens is: {max_output_tokens}"
-        )
-
+        # 3. Call Gemini by passing the functions directly from SENTINEL_TOOL_MAP.values()
         response = _client.models.generate_content(
-            model=model,
-            contents=[{"role": "user", "parts": [{"text": full_prompt}]}],
+            model=config_settings.model_name,
+            contents=contents,
             config=genai.types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_output_tokens
+                tools=list(SENTINEL_TOOL_MAP.values()),
+                automatic_function_calling=genai.types.AutomaticFunctionCallingConfig(disable=False),
+                temperature=config_settings.temperature,
+                max_output_tokens=config_settings.max_tokens,
+                # System instructions should ideally be in the config if not in history
+                system_instruction="You are Sentinel, a high-end insurance agent assistant."
             )
         )
         
-        # Extract text from response
-        if hasattr(response, 'text'):
+        # 4. Extract text safely
+        if response.text:
             return format_response(response.text)
-        elif hasattr(response, 'candidates') and response.candidates:
-            candidate = response.candidates[0]
-            if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
-                text = candidate.content.parts[0].text
-                return format_response(text)
         
-        return format_response("Response received but could not extract text")
-        
+        # Fallback if the model only called a tool but didn't give a text summary
+        return "Action completed successfully. How else can I help?"
+
     except Exception as e:
         return handle_api_error(e)
 
@@ -134,11 +142,11 @@ def format_response(raw_response: str) -> str:
     # Basic formatting - remove excessive whitespace and ensure proper line breaks
     formatted = raw_response.strip()
     
-    # Ensure response isn't too long (truncate if necessary)
-    max_length = 2000
-    if len(formatted) > max_length:
-        formatted = formatted[:max_length] + "..."
-        logger.warning(f"Response truncated from {len(raw_response)} to {max_length} characters")
+    # # Ensure response isn't too long (truncate if necessary)
+    # max_length = 2000
+    # if len(formatted) > max_length:
+    #     formatted = formatted[:max_length] + "..."
+    #     logger.warning(f"Response truncated from {len(raw_response)} to {max_length} characters")
     
     return formatted
 

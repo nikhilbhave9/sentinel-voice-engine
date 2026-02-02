@@ -1,45 +1,41 @@
 """
-Function/tool call handling for agent interactions.
-Provides insurance-specific operations with dummy data during development.
+Mock Toolset for Sentinel Insurance Agent.
+These functions simulate backend API calls for policy lookups and scheduling.
 """
+from typing import Dict, List
 
-from typing import Dict, Any
-import logging
-
-logger = logging.getLogger(__name__)
-
-# Available functions that the agent can call
-AVAILABLE_FUNCTIONS: Dict[str, callable] = {}
-
-def execute_function(function_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-    """Function dispatcher to execute requested functions"""
-    # TODO: Implement function execution
-    return {"status": "not_implemented", "data": None}
-
-def get_policy_info(policy_number: str) -> Dict[str, Any]:
-    """Policy lookup - returns dummy data during development"""
-    # TODO: Implement policy lookup
-    return {
-        "policy_number": policy_number,
-        "status": "active",
-        "coverage": "dummy_data"
+def lookup_policy(policy_number: str) -> str:
+    """
+    Retrieves policy details. Use this when a user provides a policy number in the Support Flow.
+    """
+    mock_db = {
+        "POL123": "Status: Active. Type: Auto. Coverage: Full Comprehensive. Holder: John.",
+        "FIRE99": "Status: Active. Type: Fire/Home. Coverage: Structure & Contents. Holder: Jane.",
     }
+    return mock_db.get(policy_number.upper(), "Error: Policy number not found.")
 
-def check_claim_status(claim_id: str) -> Dict[str, Any]:
-    """Claim status check - returns dummy data during development"""
-    # TODO: Implement claim status check
-    return {
-        "claim_id": claim_id,
-        "status": "processing",
-        "details": "dummy_data"
-    }
+def triage_and_escalate(name: str, issue_description: str, phone: str) -> str:
+    """
+    Escalates complex issues to a human agent. Use this for claims or expired policies.
+    """
+    return f"SUCCESS: Handover triggered for {name}. Specialist will call {phone} regarding: {issue_description}."
 
-def schedule_appointment(date: str, time: str) -> Dict[str, Any]:
-    """Appointment scheduling - returns dummy data during development"""
-    # TODO: Implement appointment scheduling
-    return {
-        "date": date,
-        "time": time,
-        "status": "scheduled",
-        "confirmation": "dummy_confirmation"
-    }
+def get_available_slots(insurance_type: str) -> List[str]:
+    """
+    Returns available appointment times for a sales consultation. Use this in the Sales Flow.
+    """
+    return ["Monday at 10:00 AM", "Tuesday at 2:00 PM", "Wednesday at 4:30 PM"]
+
+def book_appointment(name: str, phone: str, time_slot: str) -> str:
+    """
+    Finalizes a sales appointment booking. Use this once name, phone, and slot are confirmed.
+    """
+    return f"CONFIRMED: Appointment for {name} ({phone}) at {time_slot} is booked."
+
+# Dictionary for the Gemini SDK to map tool names to functions
+SENTINEL_TOOL_MAP = {
+    "lookup_policy": lookup_policy,
+    "triage_and_escalate": triage_and_escalate,
+    "get_available_slots": get_available_slots,
+    "book_appointment": book_appointment
+}
