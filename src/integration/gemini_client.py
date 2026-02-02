@@ -63,9 +63,9 @@ def _check_rate_limits():
     _daily_request_count += 1
 
 
-def generate_response(prompt: str, context: str = "", conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
+def generate_response(prompt: str, context: str = "", conversation_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
     """
-    Main API call to Gemini
+    Main API call to Gemini with latency tracking
     
     Args:
         prompt: The user's message or system prompt
@@ -73,8 +73,14 @@ def generate_response(prompt: str, context: str = "", conversation_history: Opti
         conversation_history: List of previous messages in format [{"role": "user/model", "content": "..."}]
     
     Returns:
-        Generated response from Gemini
+        Dictionary containing:
+            - response: Generated response text from Gemini
+            - latency_ms: LLM processing time in milliseconds
+            - token_count: Number of tokens used (if available)
+            - model_name: Name of the model used
     """
+    start_time = time.time()
+    
     try:
         _initialize_client()
         _check_rate_limits()
@@ -115,15 +121,44 @@ def generate_response(prompt: str, context: str = "", conversation_history: Opti
             )
         )
         
-        # 4. Extract text safely
-        if response.text:
-            return format_response(response.text)
+        # Calculate latency
+        latency_ms = (time.time() - start_time) * 1000
         
-        # Fallback if the model only called a tool but didn't give a text summary
-        return "Action completed successfully. How else can I help?"
+        # Extract token count if available
+        token_count = 0
+        if hasattr(response, 'usage_metadata'):
+            # Try to get total token count from usage metadata
+            if hasattr(response.usage_metadata, 'total_token_count'):
+                token_count = response.usage_metadata.total_token_count
+            elif hasattr(response.usage_metadata, 'candidates_token_count'):
+                token_count = response.usage_metadata.candidates_token_count
+        
+        # 4. Extract text safely
+        response_text = ""
+        if response.text:
+            response_text = format_response(response.text)
+        else:
+            # Fallback if the model only called a tool but didn't give a text summary
+            response_text = "Action completed successfully. How else can I help?"
+        
+        return {
+            "response": response_text,
+            "latency_ms": latency_ms,
+            "token_count": token_count,
+            "model_name": config_settings.model_name
+        }
 
     except Exception as e:
-        return handle_api_error(e)
+        # Calculate latency even for errors
+        latency_ms = (time.time() - start_time) * 1000
+        error_response = handle_api_error(e)
+        
+        return {
+            "response": error_response,
+            "latency_ms": latency_ms,
+            "token_count": 0,
+            "model_name": get_settings().model_name if _client else "unknown"
+        }
 
 
 def format_response(raw_response: str) -> str:
