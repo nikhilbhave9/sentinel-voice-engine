@@ -63,11 +63,18 @@ class ConversationStateData:
         valid_states = ["greeting", "support_flow", "sales_flow", "error_handling"]
         return state in valid_states
 
-    def add_message(self, role: str, content: str) -> None:
-        """Add a message to conversation history"""
+    def add_message(self, role: str, content: str, source: str = "text") -> None:
+        """Add a message to conversation history
+        
+        Args:
+            role: The role of the message sender (user/assistant)
+            content: The message content
+            source: The source of the message (voice/text), defaults to "text"
+        """
         self.conversation_history.append({
             'role': role,
             'content': content,
+            'source': source,
             'timestamp': str(Dict[str, Any])  # Placeholder for timestamp
         })
 
